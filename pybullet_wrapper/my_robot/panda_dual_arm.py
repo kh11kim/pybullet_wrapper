@@ -1,6 +1,6 @@
 import numpy as np
-from pybullet_wrapper.core import Bullet
-from pybullet_wrapper.my_robot import Panda
+from ..core import Bullet
+from ..my_robot import Panda
 
 class PandaDualArm:
     def __init__(

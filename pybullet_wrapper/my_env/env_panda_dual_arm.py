@@ -1,8 +1,8 @@
 import gym
 import numpy as np
-from pybullet_wrapper.core import Bullet
-from pybullet_wrapper.scene_maker import BulletSceneMaker
-from pybullet_wrapper.my_robot import PandaDualArm
+from ..core import Bullet
+from ..scene_maker import BulletSceneMaker
+from ..my_robot import PandaDualArm
 
 class PandaDualArmEnv:
     def __init__(self, render=False):
