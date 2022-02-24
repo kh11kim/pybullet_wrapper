@@ -93,10 +93,10 @@ class BulletRobot:
         return self.bullet.get_link_orientation(self.name, link)
 
     def get_ee_position(self):
-        return self.get_link_pos(self.ee_idx)
+        return self.get_link_position(self.ee_idx)
     
     def get_ee_orientation(self):
-        return self.get_link_orn(self.ee_idx)
+        return self.get_link_orientation(self.ee_idx)
     
     def get_ee_jacobian(self):
         joints = self.get_joints()
