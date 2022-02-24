@@ -1,6 +1,6 @@
 import numpy as np
 from ..core import Bullet
-from ..my_robot import Panda
+from ..robots import Panda
 from contextlib import contextmanager
 
 class PandaDualArm:

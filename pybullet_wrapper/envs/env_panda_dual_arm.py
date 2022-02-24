@@ -3,7 +3,7 @@ import warnings
 from ..core import Bullet
 from ..scene_maker import BulletSceneMaker
 from ..collision_checker import BulletCollisionChecker
-from ..my_robot import PandaDualArm
+from ..robots import PandaDualArm
 
 class PandaDualArmEnv:
     def __init__(self, render=False):
