@@ -1,6 +1,7 @@
 import numpy as np
 from typing import Any, Dict, Iterator, Optional
 from .core import Bullet
+import pybullet as p
 
 class BulletSceneMaker:
     def __init__(self, bullet:Bullet):
@@ -240,3 +241,73 @@ class BulletSceneMaker:
             lateral_friction=lateral_friction,
             spinning_friction=spinning_friction,
         )
+    
+    def view_position(self, name, position, rgb_color=[1.,0.,0.]):
+        if not name in self.bullet._bodies_idx:
+            self.create_sphere(
+                body_name=name,
+                radius=0.02,
+                mass=0.0,
+                ghost=True,
+                position=np.zeros(3),
+                rgba_color=np.array([*rgb_color, 0.3]),
+            )    
+        self.bullet.set_base_pose(name, position, np.array([0.0, 0.0, 0.0, 1.0]))
+    
+    def view_frame(self, name, pos, orn):
+        if not name in self.bullet._bodies_idx:
+            self.bullet._bodies_idx[name] = self._make_axes()
+        x_orn = p.getQuaternionFromEuler([0., np.pi/2, 0])
+        #SO3.Ry(90, "deg")
+        y_orn = p.getQuaternionFromEuler([-np.pi/2, 0, 0])
+        #SO3.Rx(-90, "deg")
+        z_orn = [0., 0., 0., 1.]
+        #SO3()
+        #orientation = 
+        #SO3(np.array([orn[-1], *orn[:3]]))
+        axis_orn = [x_orn, y_orn, z_orn]
+        for i, idx in enumerate(self.bullet._bodies_idx[name]):
+            _, orn_ = p.multiplyTransforms([0,0,0], orn, [0,0,0], axis_orn[i])
+            #(orientation@axis_orn[i]).to_qtn()
+            #orn_ = [*orn_[1:], orn_[0]]
+            self.bullet.physics_client.resetBasePositionAndOrientation(
+                bodyUniqueId=idx, posObj=pos, ornObj=orn_
+            )
+
+    def _make_axes(
+        self,
+        length=0.05
+    ):
+        radius = length/12
+        visualFramePosition = [0,0,length/2]
+        r, g, b = np.eye(3)
+        orns = [
+            [0, 0.7071, 0, 0.7071],
+            [-0.7071, 0, 0, 0.7071],
+            [0,0,0,1]
+        ]
+        a = 0.9
+        shape_ids = []
+        for color in [r, g, b]:
+            shape_ids.append(
+                self.bullet.physics_client.createVisualShape(
+                    shapeType=self.bullet.physics_client.GEOM_CYLINDER,
+                    radius=radius,
+                    length=length,
+                    visualFramePosition=visualFramePosition,
+                    rgbaColor=[*color, a],
+                    specularColor=[0., 0., 0.]
+                )
+            )
+        axes_id = []
+        for orn, shape in zip(orns, shape_ids):
+            axes_id.append(
+                self.bullet.physics_client.createMultiBody(
+                    baseVisualShapeIndex=shape,
+                    baseCollisionShapeIndex=-1,
+                    baseMass=0.,
+                    basePosition=[0,0,0],
+                    baseOrientation=orn
+                )
+            )
+        return axes_id
