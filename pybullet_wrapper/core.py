@@ -56,70 +56,6 @@ class Bullet:
         """Close the simulation."""
         self.physics_client.disconnect()
 
-    def render(
-        self,
-        mode: str = "human",
-        width: int = 720,
-        height: int = 480,
-        target_position: np.ndarray = np.zeros(3),
-        distance: float = 1.4,
-        yaw: float = 45,
-        pitch: float = -30,
-        roll: float = 0,
-    ) -> Optional[np.ndarray]:
-        """Render.
-
-        If mode is "human", make the rendering real-time. All other arguments are
-        unused. If mode is "rgb_array", return an RGB array of the scene.
-
-        Args:
-            mode (str): "human" of "rgb_array". If "human", this method waits for the time necessary to have
-                a realistic temporal rendering and all other args are ignored. Else, return an RGB array.
-            width (int, optional): Image width. Defaults to 720.
-            height (int, optional): Image height. Defaults to 480.
-            target_position (np.ndarray, optional): Camera targetting this postion, as (x, y, z).
-                Defaults to [0., 0., 0.].
-            distance (float, optional): Distance of the camera. Defaults to 1.4.
-            yaw (float, optional): Yaw of the camera. Defaults to 45.
-            pitch (float, optional): Pitch of the camera. Defaults to -30.
-            roll (int, optional): Rool of the camera. Defaults to 0.
-
-        Returns:
-            RGB np.ndarray or None: An RGB array if mode is 'rgb_array', else None.
-        """
-        if mode == "human":
-            self.physics_client.configureDebugVisualizer(self.physics_client.COV_ENABLE_SINGLE_STEP_RENDERING)
-            time.sleep(self.dt)  # wait to seems like real speed
-        if mode == "rgb_array":
-            if self.connection_mode == p.DIRECT:
-                warnings.warn(
-                    "The use of the render method is not recommended when the environment "
-                    "has not been created with render=True. The rendering will probably be weird. "
-                    "Prefer making the environment with option `render=True`. For example: "
-                    "`env = gym.make('PandaReach-v2', render=True)`.",
-                    UserWarning,
-                )
-            view_matrix = self.physics_client.computeViewMatrixFromYawPitchRoll(
-                cameraTargetPosition=target_position,
-                distance=distance,
-                yaw=yaw,
-                pitch=pitch,
-                roll=roll,
-                upAxisIndex=2,
-            )
-            proj_matrix = self.physics_client.computeProjectionMatrixFOV(
-                fov=60, aspect=float(width) / height, nearVal=0.1, farVal=100.0
-            )
-            (_, _, px, depth, _) = self.physics_client.getCameraImage(
-                width=width,
-                height=height,
-                viewMatrix=view_matrix,
-                projectionMatrix=proj_matrix,
-                renderer=p.ER_BULLET_HARDWARE_OPENGL,
-            )
-
-            return px
-    
     def get_joint_info(self, body, joint=None, all=False):
         if all:
             info = {}
@@ -131,6 +67,11 @@ class Bullet:
                     info[i] = self.physics_client.getJointInfo(self._bodies_idx[body], i)
             return info
         return self.physics_client.getJointInfo(self._bodies_idx[body], joint)
+    
+
+    #----------------------------------
+    # -- Kinematicss Functionality --
+    #----------------------------------
 
     def get_base_position(self, body: str) -> np.ndarray:
         """Get the position of the body.
@@ -327,7 +268,13 @@ class Bullet:
             forces=forces,
         )
 
-    def inverse_kinematics(self, body: str, link: int, position: np.ndarray, orientation: np.ndarray) -> np.ndarray:
+    def inverse_kinematics(
+        self, 
+        body: str, 
+        link: int, 
+        position: np.ndarray, 
+        orientation: Optional[np.ndarray] = None
+    ) -> np.ndarray:
         """Compute the inverse kinematics and return the new joint state.
 
         Args:
@@ -339,25 +286,29 @@ class Bullet:
         Returns:
             np.ndarray: The new joint state.
         """
-        joint_state = self.physics_client.calculateInverseKinematics(
+        joint_angles = self.physics_client.calculateInverseKinematics(
             bodyIndex=self._bodies_idx[body],
             endEffectorLinkIndex=link,
             targetPosition=position,
             targetOrientation=orientation,
         )
-        return np.array(joint_state)
+        return np.array(joint_angles)
     
-    def get_jacobian(self, name, link, joints):
+    def get_jacobian(self, name, link, joint_angles):
         trans, rot = self.physics_client.calculateJacobian(
             bodyUniqueId=self._bodies_idx[name],
             linkIndex=link,
             localPosition=[0,0,0],
-            objPositions=joints.tolist(),
-            objVelocities=np.zeros_like(joints).tolist(),
-            objAccelerations=np.zeros_like(joints).tolist()
+            objPositions=joint_angles.tolist(),
+            objVelocities=np.zeros_like(joint_angles).tolist(),
+            objAccelerations=np.zeros_like(joint_angles).tolist()
         )
         return np.vstack([trans, rot])
     
+    #----------------------------------
+    # -- Dynamics Functionality --
+    #----------------------------------
+
     def set_lateral_friction(self, body: str, link: int, lateral_friction: float) -> None:
         """Set the lateral friction of a link.
 
@@ -420,4 +371,69 @@ class Bullet:
             body_name (str): The name of the body. Must be unique in the sim.
         """
         self._bodies_idx[body_name] = self.physics_client.loadURDF(**kwargs)
+    
+    def render(
+        self,
+        mode: str = "human",
+        width: int = 720,
+        height: int = 480,
+        target_position: np.ndarray = np.zeros(3),
+        distance: float = 1.4,
+        yaw: float = 45,
+        pitch: float = -30,
+        roll: float = 0,
+    ) -> Optional[np.ndarray]:
+        """Render.
+
+        If mode is "human", make the rendering real-time. All other arguments are
+        unused. If mode is "rgb_array", return an RGB array of the scene.
+
+        Args:
+            mode (str): "human" of "rgb_array". If "human", this method waits for the time necessary to have
+                a realistic temporal rendering and all other args are ignored. Else, return an RGB array.
+            width (int, optional): Image width. Defaults to 720.
+            height (int, optional): Image height. Defaults to 480.
+            target_position (np.ndarray, optional): Camera targetting this postion, as (x, y, z).
+                Defaults to [0., 0., 0.].
+            distance (float, optional): Distance of the camera. Defaults to 1.4.
+            yaw (float, optional): Yaw of the camera. Defaults to 45.
+            pitch (float, optional): Pitch of the camera. Defaults to -30.
+            roll (int, optional): Rool of the camera. Defaults to 0.
+
+        Returns:
+            RGB np.ndarray or None: An RGB array if mode is 'rgb_array', else None.
+        """
+        if mode == "human":
+            self.physics_client.configureDebugVisualizer(self.physics_client.COV_ENABLE_SINGLE_STEP_RENDERING)
+            time.sleep(self.dt)  # wait to seems like real speed
+        if mode == "rgb_array":
+            if self.connection_mode == p.DIRECT:
+                warnings.warn(
+                    "The use of the render method is not recommended when the environment "
+                    "has not been created with render=True. The rendering will probably be weird. "
+                    "Prefer making the environment with option `render=True`. For example: "
+                    "`env = gym.make('PandaReach-v2', render=True)`.",
+                    UserWarning,
+                )
+            view_matrix = self.physics_client.computeViewMatrixFromYawPitchRoll(
+                cameraTargetPosition=target_position,
+                distance=distance,
+                yaw=yaw,
+                pitch=pitch,
+                roll=roll,
+                upAxisIndex=2,
+            )
+            proj_matrix = self.physics_client.computeProjectionMatrixFOV(
+                fov=60, aspect=float(width) / height, nearVal=0.1, farVal=100.0
+            )
+            (_, _, px, depth, _) = self.physics_client.getCameraImage(
+                width=width,
+                height=height,
+                viewMatrix=view_matrix,
+                projectionMatrix=proj_matrix,
+                renderer=p.ER_BULLET_HARDWARE_OPENGL,
+            )
+
+            return px
+    
     

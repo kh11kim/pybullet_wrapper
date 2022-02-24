@@ -54,9 +54,10 @@ class BulletRobot:
     
     @contextmanager
     def no_set_joint(self):
-        joints_temp = self.get_joint_angles()
-        yield
-        self.set_joint_angles(joints_temp)
+        with self.bullet.no_rendering():
+            joints_temp = self.get_joint_angles()
+            yield
+            self.set_joint_angles(joints_temp)
 
     def get_joint_info(self):
         result = {}
@@ -103,4 +104,19 @@ class BulletRobot:
         joints = np.hstack([joints, 0, 0]) #add finger
         jac = self.bullet.get_jacobian(self.name, self.ee_idx, joints)
         return jac[:,:-2] #remove finger
-        
+    
+    def forward_kinematics(self, joint_angles):
+        with self.no_set_joint():
+            self.set_joint_angles(joint_angles)
+            pos = self.get_ee_position()
+            orn = self.get_ee_orientation()
+        return pos, orn
+    
+    def inverse_kinematics(self, pos, orn=None):
+        result = self.bullet.inverse_kinematics(
+            body=self.name,
+            link=self.ee_idx,
+            position=pos,
+            orientation=None
+        )
+        return result[self.ctrl_joint_idxs]
