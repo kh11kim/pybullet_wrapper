@@ -12,10 +12,6 @@ class BulletCollisionChecker:
         self.bullet = bullet
         self.links = self.get_all_links()
         self.collision_check_pairs = self.get_collision_check_pairs()
-        self.n_check = 0
-
-    def reset(self):
-        self.n_check = 0
 
     def get_all_links(self):
         link_list = []
@@ -37,7 +33,6 @@ class BulletCollisionChecker:
         return collision_check_pairs
     
     def is_collision(self):
-        self.n_check += 0
         for obj1, obj2 in self.collision_check_pairs:
             dist_info = self.bullet.physics_client.getClosestPoints(
                 bodyA=obj1.body_uid,

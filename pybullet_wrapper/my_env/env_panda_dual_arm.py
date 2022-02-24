@@ -1,7 +1,8 @@
-import gym
 import numpy as np
+import warnings
 from ..core import Bullet
 from ..scene_maker import BulletSceneMaker
+from ..collision_checker import BulletCollisionChecker
 from ..my_robot import PandaDualArm
 
 class PandaDualArmEnv:
@@ -11,6 +12,7 @@ class PandaDualArmEnv:
         self.scene_maker = BulletSceneMaker(self.bullet)
         self.robot = PandaDualArm(self.bullet)
         self._make_env()
+        self.checker = BulletCollisionChecker(self.bullet)
 
     def _make_env(self):
         self.scene_maker.create_plane(z_offset=-0.4)
@@ -43,3 +45,34 @@ class PandaDualArmEnv:
             pitch=pitch,
             roll=roll,
         )
+    
+    def get_random_configuration(self, collision_free=False):
+        if not collision_free:
+            return self.robot.get_random_joint_angles(set=False)
+        else:
+            random_joint_angles = None
+            with self.robot.no_set_joint():
+                for i in range(100):
+                    self.robot.get_random_joint_angles(set=True)
+                    if not self.checker.is_collision():
+                        random_joint_angles = self.robot.get_joint_angles()
+        return random_joint_angles
+
+    def reset(self):
+        joints_init = self.get_random_configuration(collision_free=True)
+        if joints_init is not None:
+            self.robot.set_joint_angles(joints_init)
+            return joints_init
+        else:
+            warnings.warn('env.reset() can`t find feasible reset configuration')
+            return None
+    
+    def is_collision(self, joint_angles=None):
+        if joint_angles is None:
+            joint_angles = self.robot.get_joint_angles()
+        result = False
+        with self.robot.no_set_joint():
+            self.robot.set_joint_angles(joint_angles)
+            if self.checker.is_collision():
+                result = True
+        return result
