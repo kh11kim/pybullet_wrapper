@@ -258,13 +258,8 @@ class BulletSceneMaker:
         if not name in self.bullet._bodies_idx:
             self.bullet._bodies_idx[name] = self._make_axes()
         x_orn = p.getQuaternionFromEuler([0., np.pi/2, 0])
-        #SO3.Ry(90, "deg")
         y_orn = p.getQuaternionFromEuler([-np.pi/2, 0, 0])
-        #SO3.Rx(-90, "deg")
         z_orn = [0., 0., 0., 1.]
-        #SO3()
-        #orientation = 
-        #SO3(np.array([orn[-1], *orn[:3]]))
         axis_orn = [x_orn, y_orn, z_orn]
         for i, idx in enumerate(self.bullet._bodies_idx[name]):
             _, orn_ = p.multiplyTransforms([0,0,0], orn, [0,0,0], axis_orn[i])

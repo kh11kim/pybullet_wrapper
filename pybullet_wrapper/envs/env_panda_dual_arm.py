@@ -5,14 +5,20 @@ from ..scene_maker import BulletSceneMaker
 from ..collision_checker import BulletCollisionChecker
 from ..robots import PandaDualArm
 
-class PandaDualArmEnv:
-    def __init__(self, render=False):
+class PandaDualArmEnvBase:
+    def __init__(self, render=False, arm_distance=0.4):
         self.is_render = render
         self.bullet = Bullet(render=render)
         self.scene_maker = BulletSceneMaker(self.bullet)
-        self.robot = PandaDualArm(self.bullet)
+        self.robot = PandaDualArm(
+            self.bullet,
+            panda1_position=[0,arm_distance/2,0],
+            panda2_position=[0,-arm_distance/2,0]
+        )
         self._make_env()
         self.checker = BulletCollisionChecker(self.bullet)
+        self.task_ll = [0, -0.5, 0]
+        self.task_ul = [0.5, 0.5, 0.5]
 
     def _make_env(self):
         self.scene_maker.create_plane(z_offset=-0.4)
@@ -57,6 +63,25 @@ class PandaDualArmEnv:
                     if not self.checker.is_collision():
                         random_joint_angles = self.robot.get_joint_angles()
         return random_joint_angles
+    
+    def get_random_free_configuration_in_taskspace(self, panda1_first=True):
+        if panda1_first:
+            first_robot = self.robot.panda1
+            second_robot = self.robot.panda2
+        else:
+            first_robot = self.robot.panda2
+            second_robot = self.robot.panda1
+        
+        for robot in [first_robot, second_robot]:
+            while True:
+                robot.get_random_joint_angles(set=True)
+                ee_position = robot.get_ee_position()
+                is_collision_free = not self.checker.is_collision()
+                is_in_taskspace = np.all(self.task_ll < ee_position) \
+                                  & np.all(ee_position < self.task_ul)
+                if is_collision_free & is_in_taskspace:
+                    break
+        return self.robot.get_joint_angles()
 
     def reset(self):
         joints_init = self.get_random_configuration(collision_free=True)

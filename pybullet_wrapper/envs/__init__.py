@@ -1,1 +1,2 @@
-from .env_panda_dual_arm import PandaDualArmEnv
+from .env_panda import *
+from .env_panda_dual_arm import PandaDualArmEnvBase
