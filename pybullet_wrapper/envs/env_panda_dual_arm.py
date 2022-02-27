@@ -258,6 +258,6 @@ class PandaDualArmGymEnv(PandaDualArmEnvBase, gym.GoalEnv):
 
 register(
     id='MyPandaDualArmReach-v0',
-    entry_point='dualarm.pybullet_wrapper:PandaDualArmGymEnv',
+    entry_point='pybullet_wrapper:PandaDualArmGymEnv',
     max_episode_steps=100,
 )

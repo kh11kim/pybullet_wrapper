@@ -122,16 +122,27 @@ class PandaEnvBase:
         return result
 
 class PandaGymEnv(PandaEnvBase, gym.GoalEnv):
-    def __init__(self, render=False, reward_type="pose"):
+    def __init__(self, render=False, reward_type="joint", level=0.5):
+        self.level = level
         self.reward_type = reward_type
         super().__init__(render=render)
         self.n_obs = self.robot.n_joints + 3 + 9
-        self.task_ll = np.array([-1.2, -1.2, -1.2, *[-1]*9]) #pos3 + orn9 =12
-        self.task_ul = np.array([1.2, 1.2, 1.2, *[1]*9])
+        self.task_ll = np.array([-1.2, -1.2, -1.2]) #pos3 + orn9 =12
+        self.task_ul = np.array([1.2, 1.2, 1.2])
         self.observation_space = spaces.Dict(dict(
-            observation=spaces.Box(self.robot.joint_ll, self.robot.joint_ul, shape=(self.robot.n_joints,), dtype=np.float32),    
-            achieved_goal=spaces.Box(self.task_ll, self.task_ul, shape=(3+9,), dtype=np.float32),
-            desired_goal=spaces.Box(self.task_ll, self.task_ul, shape=(3+9,), dtype=np.float32),
+            observation=spaces.Box(-1, 1, shape=(1,), dtype=np.float32),    
+            achieved_goal=spaces.Box(
+                self.robot.joint_ll, 
+                self.robot.joint_ul, 
+                shape=(self.robot.n_joints,), 
+                dtype=np.float32
+            ),
+            desired_goal=spaces.Box(
+                self.robot.joint_ll, 
+                self.robot.joint_ul, 
+                shape=(self.robot.n_joints,), 
+                dtype=np.float32
+            ),
         ))
         self.action_space = spaces.Box(-1.0, 1.0, shape=(self.robot.n_joints,), dtype=np.float32)
         self._goal = None
@@ -166,53 +177,59 @@ class PandaGymEnv(PandaEnvBase, gym.GoalEnv):
         self._goal = arr
     
     def get_observation(self):
-        joint_angles = self.robot.get_joint_angles()
-        pos = self.robot.get_ee_position()
-        orn = self.robot.get_ee_orientation()
-        achieved_goal = np.hstack([pos, p.getMatrixFromQuaternion(orn)])
-        desired_goal = self.goal
         return dict(
-            observation=joint_angles,
-            achieved_goal=achieved_goal,
-            desired_goal=desired_goal,
+            observation=0.,
+            achieved_goal=self.robot.get_joint_angles(),
+            desired_goal=self.goal,
         )
-    
+
+    def is_limit(self):
+        joint_angles = self.robot.get_joint_angles()
+        is_ll = np.any(joint_angles <= self.robot.joint_ll)
+        is_ul = np.any(joint_angles >= self.robot.joint_ul)
+        return is_ll | is_ul
+
     def set_action(self, action: np.ndarray):
+        joint_prev = self.robot.get_joint_angles()
         action = action.copy()
         action = np.clip(action, self.action_space.low, self.action_space.high)
         joint_target = self.robot.get_joint_angles()
         joint_target += action * self.max_joint_change
+        joint_target = np.clip(joint_target, self.robot.joint_ll, self.robot.joint_ul)
+        if (self.checker.is_collision() | self.is_limit()):
+            self.robot.set_joint_angles(joint_prev)
+            self._collision_flag = True
+        self._collision_flag = False
         self.robot.set_joint_angles(joint_target)
 
-    def distance(self, pose1: np.ndarray, pose2: np.ndarray) -> np.float64:
-        pos1, orn_mat1 = pose1[:3], pose1[3:].reshape(3,3)
-        pos2, orn_mat2 = pose2[:3], pose2[3:].reshape(3,3)
-        diff_mat = orn_mat1.T@orn_mat2
-        delta = np.linalg.norm(pos1 - pos2)
-        delta_theta = np.arccos((np.trace(diff_mat)-1)/2)
-        return delta + delta_theta/(np.pi * 2)
+    # def distance(self, pose1: np.ndarray, pose2: np.ndarray) -> np.float64:
+    #     pos1, orn_mat1 = pose1[:3], pose1[3:].reshape(3,3)
+    #     pos2, orn_mat2 = pose2[:3], pose2[3:].reshape(3,3)
+    #     diff_mat = orn_mat1.T@orn_mat2
+    #     delta = np.linalg.norm(pos1 - pos2)
+    #     delta_theta = np.arccos((np.trace(diff_mat)-1)/2)
+    #     return delta + delta_theta/(np.pi * 2)
 
-    def is_success(self, achieved_goal: np.ndarray, desired_goal: np.ndarray):
-        return self.distance(achieved_goal, desired_goal) < self.eps
+    def is_success(self, joint_curr: np.ndarray, joint_goal: np.ndarray):
+        return np.linalg.norm(joint_curr - joint_goal) < self.eps
 
     def reset(self):
-        # make goal
-        self.goal_joints = self.get_random_configuration(collision_free=True)
-        self.robot.set_joint_angles(self.goal_joints)
-        goal_pos = self.robot.get_ee_position()
-        goal_orn = self.robot.get_ee_orientation()
-        self.goal = np.hstack([goal_pos, p.getMatrixFromQuaternion(goal_orn)])
-        # make start
-        self.start_joints = self.get_random_configuration(collision_free=True)
-        self.robot.set_joint_angles(self.start_joints)
-        start_pos = self.robot.get_ee_position()
-        start_orn = self.robot.get_ee_orientation()
-        self.start = np.hstack([start_pos, p.getMatrixFromQuaternion(start_orn)])
-        self.robot.set_joint_angles(self.start_joints)
+        random_joint1 = self.get_random_configuration(collision_free=True)
+        while True:
+            random_joint2 = self.get_random_configuration(collision_free=False)
+            goal = random_joint1 + (random_joint2 - random_joint1) * self.level
+            if not self.is_collision(goal):
+                self.robot.set_joint_angles(goal)
+                goal_ee = self.robot.get_ee_position()
+                break
+        self.start = random_joint1
+        self.goal = goal
+        self.robot.set_joint_angles(self.start)
+        start_ee = self.robot.get_ee_position()
 
         if self.is_render:
-            self.scene_maker.view_frame("goal", goal_pos, goal_orn)
-            self.scene_maker.view_frame("curr", start_pos, start_orn)
+            self.scene_maker.view_position("goal", goal_ee)
+            self.scene_maker.view_position("curr", start_ee)
         return self.get_observation()
 
 
@@ -223,29 +240,22 @@ class PandaGymEnv(PandaEnvBase, gym.GoalEnv):
         info = dict(
             is_success=self.is_success(obs_["achieved_goal"], obs_["desired_goal"]),
             actions=action.copy(),
-            collisions=self.checker.is_collision(),
+            collisions=self._collision_flag,
         )
         reward = self.compute_reward(obs_["achieved_goal"], obs_["desired_goal"], info)
         if self.is_render:
-            self.scene_maker.view_frame("curr", self.robot.get_ee_position(), self.robot.get_ee_orientation())
+            self.scene_maker.view_position("curr", self.robot.get_ee_position())
         return obs_, reward, done, info
 
     def compute_reward(self, achieved_goal, desired_goal, info):
         if len(achieved_goal.shape) == 2:
-            is_success = np.array([1 if i["is_success"] else 0 for i in info])
             actions = np.array([i["actions"] for i in info])
             collisions = np.array([i["collisions"] for i in info])
-            r = - np.array([
-                -self.distance(a_goal, d_goal) for a_goal, d_goal in zip(achieved_goal, desired_goal)
-            ])
-                #np.zeros(len(info))
         else:
-            is_success = info["is_success"]
             actions = info["actions"]
             collisions = info["collisions"]
-            r = -self.distance(achieved_goal, desired_goal) #0.
+        r = - np.linalg.norm(achieved_goal-desired_goal, axis=-1)
         
-        #r -= self.distance(desired_goal - achieved_goal, axis=-1)
         if "action" in self.reward_type:
             r -= np.linalg.norm(actions, axis=-1) / 10
         
