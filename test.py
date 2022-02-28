@@ -3,7 +3,8 @@ from pybullet_wrapper import *
 import numpy as np
 import pybullet as p
 import time
-env = PandaGymEnvColAvoid(render=True, reward_type="joint_col_obs")
+
+env = PandaDualArmGymEnvColAvoid(render=True, reward_type="joint_col_obs")
 #env = PandaDualArmGymEnv(render=True, level=0.1)
 #env = gym.make("MyPandaDualArmReach-v0")
 env.set_debug_mode()

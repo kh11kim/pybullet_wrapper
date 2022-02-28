@@ -11,7 +11,7 @@ from gym import spaces
 from gym.envs.registration import register
 
 class PandaDualArmEnvBase:
-    def __init__(self, render=False, arm_distance=0.4):
+    def __init__(self, render=False, arm_distance=0.4, task_ll=[0, -0.5, 0], task_ul=[0.5, 0.5, 0.5]):
         self.is_render = render
         self.bullet = Bullet(render=render)
         self.scene_maker = BulletSceneMaker(self.bullet)
@@ -22,8 +22,8 @@ class PandaDualArmEnvBase:
         )
         self._make_env()
         self.checker = BulletCollisionChecker(self.bullet)
-        self.task_ll = [0, -0.5, 0]
-        self.task_ul = [0.5, 0.5, 0.5]
+        self.task_ll = task_ll
+        self.task_ul = task_ul
 
     def _make_env(self):
         self.scene_maker.create_plane(z_offset=-0.4)
@@ -117,10 +117,10 @@ class PandaDualArmEnvBase:
     def set_debug_mode(self):
         self.bullet.physics_client.configureDebugVisualizer(p.COV_ENABLE_GUI, 1)
         self.bullet.physics_client.configureDebugVisualizer(p.COV_ENABLE_MOUSE_PICKING, 1)
-        joint_angles = self.robot.get_joint_angles()
+        joint_angles = self.worker.get_joint_angles()
         self.param_idxs = []
-        for idx in self.robot.ctrl_joint_idxs:
-            name = self.robot.joint_info[idx]["joint_name"].decode("utf-8")
+        for idx in self.worker.ctrl_joint_idxs:
+            name = self.worker.joint_info[idx]["joint_name"].decode("utf-8")
             param_idx = self.bullet.physics_client.addUserDebugParameter(
                 name,-4,4,
                 joint_angles[idx]
@@ -131,7 +131,7 @@ class PandaDualArmEnvBase:
         joint_param_values = []
         for param in self.param_idxs:
             joint_param_values.append(p.readUserDebugParameter(param))
-        self.robot.set_joint_angles(joint_param_values)
+        self.worker.set_joint_angles(joint_param_values)
 
 class PandaDualArmGymEnv(PandaDualArmEnvBase, gym.GoalEnv):
     """ joint
