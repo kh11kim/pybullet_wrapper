@@ -207,7 +207,7 @@ class BulletSceneMaker:
             mass=0.0,
             position=np.array([0.0, 0.0, z_offset - 0.01]),
             specular_color=np.zeros(3),
-            rgba_color=np.array([0.15, 0.15, 0.15, 1.0]),
+            rgba_color=np.array([0.85, 0.85, 0.85, 1.0]),
         )
 
     def create_table(
@@ -241,6 +241,19 @@ class BulletSceneMaker:
             lateral_friction=lateral_friction,
             spinning_friction=spinning_friction,
         )
+    
+    def make_sphere_obstacle(self, name, position, rgb_color=[0.,0.,1.]):
+        if not name in self.bullet._bodies_idx:
+            self.create_sphere(
+                body_name=name,
+                radius=0.02,
+                mass=0.0,
+                position=position,
+                rgba_color=[*rgb_color,0.3],
+                ghost=False
+            )
+        else:
+            self.bullet.set_base_pose(name, position, np.array([0.0, 0.0, 0.0, 1.0]))
     
     def view_position(self, name, position, rgb_color=[1.,0.,0.]):
         if not name in self.bullet._bodies_idx:

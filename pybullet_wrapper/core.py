@@ -7,6 +7,12 @@ import pybullet as p
 import pybullet_data
 import pybullet_utils.bullet_client as bc
 
+JOINT_ATRTIBUTE_NAMES = \
+    ["joint_index","joint_name","joint_type",
+    "q_index", "u_index", "flags", 
+    "joint_damping", "joint_friction","joint_lower_limit",
+    "joint_upper_limit","joint_max_force","joint_max_velocity",
+    "link_name","joint_axis","parent_frame_pos","parent_frame_orn","parent_index"]
 from contextlib import contextmanager
 from typing import Any, Dict, Iterator, Optional
 
@@ -55,16 +61,17 @@ class Bullet:
     def close(self) -> None:
         """Close the simulation."""
         self.physics_client.disconnect()
-
+        
     def get_joint_info(self, body, joint=None, all=False):
         if all:
             info = {}
             n_joints = self.physics_client.getNumJoints(self._bodies_idx[body])
             if n_joints == 0:
-                info[-1] = None
+                return {}
             else:
                 for i in range(n_joints):
-                    info[i] = self.physics_client.getJointInfo(self._bodies_idx[body], i)
+                    values = self.physics_client.getJointInfo(self._bodies_idx[body], i)
+                    info[i] = {name:value for name, value in zip(JOINT_ATRTIBUTE_NAMES, values)}
             return info
         return self.physics_client.getJointInfo(self._bodies_idx[body], joint)
     

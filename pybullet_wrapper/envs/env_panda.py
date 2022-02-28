@@ -9,8 +9,15 @@ from ..robots import Panda
 import pybullet as p
 
 class PandaEnvBase:
-    def __init__(self, render=False):
+    def __init__(
+        self, 
+        render=False, 
+        task_ll=np.array([-0.5, -0.5, 0.]),
+        task_ul=np.array([0.5, 0.5, 0.7]),
+    ):
         self.is_render = render
+        self.task_ll = task_ll
+        self.task_ul = task_ul
         self.bullet = Bullet(render=render)
         self.scene_maker = BulletSceneMaker(self.bullet)
         self.robot = Panda(
@@ -18,8 +25,6 @@ class PandaEnvBase:
         )
         self._make_env()
         self.checker = BulletCollisionChecker(self.bullet)
-        #self.task_ll = [0, -0.5, 0]
-        #self.task_ul = [0.5, 0.5, 0.5]
         self._joint_start = None
         self._joint_goal = None
         self.max_joint_change = 0.1
@@ -42,7 +47,15 @@ class PandaEnvBase:
 
     def _make_env(self):
         self.scene_maker.create_plane(z_offset=-0.4)
-        self.scene_maker.create_table(length=1.0, width=1.0, height=0.4, x_offset=0)
+        table_length = (self.task_ul - self.task_ll)[0]
+        table_width = (self.task_ul - self.task_ll)[1]
+        
+        self.scene_maker.create_table(
+            length=table_length, 
+            width=table_width, 
+            height=0.4, 
+            x_offset=0
+        )
         self.bullet.place_visualizer(
             target_position=np.zeros(3), 
             distance=1.6, 
@@ -80,7 +93,7 @@ class PandaEnvBase:
         with self.robot.no_set_joint():
             while True:
                 self.robot.get_random_joint_angles(set=True)
-                if not self.checker.is_collision():
+                if not self.is_collision():
                     random_joint_angles = self.robot.get_joint_angles()
                     break
 
@@ -111,15 +124,40 @@ class PandaEnvBase:
         self.joint_start = self.get_random_configuration(collision_free=True)
         self.robot.set_joint_angles(self.joint_start)
     
+    def is_limit(self):
+        joint_angles = self.robot.get_joint_angles()
+        is_ll = np.any(joint_angles <= self.robot.joint_ll)
+        is_ul = np.any(joint_angles >= self.robot.joint_ul)
+        return is_ll | is_ul
+
     def is_collision(self, joint_angles=None):
         if joint_angles is None:
             joint_angles = self.robot.get_joint_angles()
         result = False
-        with self.robot.no_set_joint():
-            self.robot.set_joint_angles(joint_angles)
-            if self.checker.is_collision():
-                result = True
-        return result
+        #with self.robot.no_set_joint():
+        self.robot.set_joint_angles(joint_angles)
+        if self.checker.is_collision():
+            result = True
+        return result | self.is_limit()
+    
+    def set_debug_mode(self):
+        self.bullet.physics_client.configureDebugVisualizer(p.COV_ENABLE_GUI, 1)
+        self.bullet.physics_client.configureDebugVisualizer(p.COV_ENABLE_MOUSE_PICKING, 1)
+        joint_angles = self.robot.get_joint_angles()
+        self.param_idxs = []
+        for idx in self.robot.ctrl_joint_idxs:
+            name = self.robot.joint_info[idx]["joint_name"].decode("utf-8")
+            param_idx = self.bullet.physics_client.addUserDebugParameter(
+                name,-4,4,
+                joint_angles[idx]
+            )
+            self.param_idxs.append(param_idx)
+    
+    def do_debug_mode(self):
+        joint_param_values = []
+        for param in self.param_idxs:
+            joint_param_values.append(p.readUserDebugParameter(param))
+        self.robot.set_joint_angles(joint_param_values)
 
 class PandaGymEnv(PandaEnvBase, gym.GoalEnv):
     def __init__(self, render=False, reward_type="joint", level=0.5):
@@ -148,26 +186,6 @@ class PandaGymEnv(PandaEnvBase, gym.GoalEnv):
         self._goal = None
         self.eps = 0.1
 
-    
-    def set_debug_mode(self):
-        self.bullet.physics_client.configureDebugVisualizer(p.COV_ENABLE_GUI, 1)
-        self.bullet.physics_client.configureDebugVisualizer(p.COV_ENABLE_MOUSE_PICKING, 1)
-        joint_angles = self.robot.get_joint_angles()
-        self.param_idxs = []
-        for idx in self.robot.ctrl_joint_idxs:
-            name = self.robot.joint_info[idx]["joint_name"].decode("utf-8")
-            param_idx = self.bullet.physics_client.addUserDebugParameter(
-                name,-4,4,
-                joint_angles[idx]
-            )
-            self.param_idxs.append(param_idx)
-    
-    def do_debug_mode(self):
-        joint_param_values = []
-        for param in self.param_idxs:
-            joint_param_values.append(p.readUserDebugParameter(param))
-        self.robot.set_joint_angles(joint_param_values)
-
     @property
     def goal(self):
         return self._goal.copy()
@@ -183,11 +201,7 @@ class PandaGymEnv(PandaEnvBase, gym.GoalEnv):
             desired_goal=self.goal,
         )
 
-    def is_limit(self):
-        joint_angles = self.robot.get_joint_angles()
-        is_ll = np.any(joint_angles <= self.robot.joint_ll)
-        is_ul = np.any(joint_angles >= self.robot.joint_ul)
-        return is_ll | is_ul
+    
 
     def set_action(self, action: np.ndarray):
         joint_prev = self.robot.get_joint_angles()
@@ -231,7 +245,6 @@ class PandaGymEnv(PandaEnvBase, gym.GoalEnv):
             self.scene_maker.view_position("goal", goal_ee)
             self.scene_maker.view_position("curr", start_ee)
         return self.get_observation()
-
 
     def step(self, action: np.ndarray):
         self.set_action(action)

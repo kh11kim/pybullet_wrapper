@@ -251,7 +251,7 @@ class PandaDualArmGymEnv(PandaDualArmEnvBase, gym.GoalEnv):
 class PandaDualArmGymEnvSingle(PandaDualArmEnvBase, gym.GoalEnv):
     """ joint
     """
-    def __init__(self, render=False, reward_type="joint", arm="left", level=0.1):
+    def __init__(self, render=False, reward_type="joint", arm="left", level=1.0):
         self.arm = arm
         self.reward_type = reward_type
         self.level = level
